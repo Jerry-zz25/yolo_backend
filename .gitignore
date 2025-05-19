@@ -1,0 +1,48 @@
+﻿# 渚濊禆鐩綍
+node_modules/
+
+# 鐜鍙橀噺
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# 鏃ュ織
+logs/
+*.log
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# 杩愯鏃舵暟鎹?
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# 娴嬭瘯瑕嗙洊鐜?
+coverage/
+
+# IDE閰嶇疆
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 鎿嶄綔绯荤粺鏂囦欢
+.DS_Store
+Thumbs.db
+
+# 构建输出
+dist/
+build/
+
+# 临时文件
+tmp/
+temp/
+
+# 机器学习模型文件（可能较大）
+src/ml/models/*.weights
+src/ml/models/*.pt
+src/ml/models/*.pb

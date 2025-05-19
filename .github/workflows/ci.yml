@@ -1,0 +1,129 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ '**' ]
+  pull_request:
+    branches: [ '**' ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16.x]
+      # 快速失败策略
+      fail-fast: true
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Lint
+      run: npm run lint || exit 1
+    
+    - name: Run tests
+      run: npm run test || exit 1
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
+        verbose: true
+
+  deploy:
+    runs-on: ubuntu-latest
+    # 仅在主分支推送时执行部署
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build
+      run: npm run build --if-present
+    
+    - name: Configure SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        
+    - name: Setup known_hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+    
+    - name: Deploy to EC2
+      env:
+        EC2_HOST: ${{ secrets.EC2_HOST }}
+        EC2_USER: ${{ secrets.EC2_USER }}
+        APP_DIR: ${{ secrets.APP_DIR || '/home/ubuntu/anomaly-detection-backend' }}
+      run: |
+        # 打包应用
+        tar -czf app.tar.gz --exclude=node_modules --exclude=.git --exclude=coverage .
+        
+        # 传输到服务器
+        scp app.tar.gz $EC2_USER@$EC2_HOST:$APP_DIR/
+        
+        # 执行远程部署命令
+        ssh $EC2_USER@$EC2_HOST << 'EOL'
+          # 导航到应用目录
+          cd $APP_DIR
+          
+          # 备份当前版本
+          if [ -d "current" ]; then
+            mv current previous_$(date +%Y%m%d%H%M%S)
+          fi
+          
+          # 创建新部署目录
+          mkdir -p current
+          
+          # 解压新版本
+          tar -xzf app.tar.gz -C current
+          
+          # 安装依赖
+          cd current
+          npm ci --production
+          
+          # 应用环境变量配置
+          cp ../.env.production .env
+          
+          # 重启服务
+          pm2 restart ecosystem.config.js || pm2 start ecosystem.config.js
+          
+          # 删除临时文件
+          cd ..
+          rm app.tar.gz
+          
+          # 保留最近5个备份版本
+          ls -dt previous_* | tail -n +6 | xargs rm -rf
+        EOL
+    
+    - name: Notify deployment status
+      if: always()
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_CHANNEL: deployments
+        SLACK_TITLE: "部署状态"
+        SLACK_MESSAGE: "${{ job.status == 'success' && '✅ 部署成功' || '❌ 部署失败' }}"
+        SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }} 

@@ -1,0 +1,357 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: '异常检测系统的基础设施 - EC2、RDS与相关安全组'
+
+Parameters:
+  EnvironmentName:
+    Description: 环境名称（例如dev、test、prod）
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+    
+  KeyName:
+    Description: 用于SSH访问EC2实例的EC2 Key Pair
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: 必须是一个已存在的EC2密钥对名称
+    
+  InstanceType:
+    Description: EC2服务器实例类型
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.small
+      - t3.medium
+    ConstraintDescription: 必须是有效的EC2实例类型
+    
+  DBInstanceClass:
+    Description: 数据库实例类型
+    Type: String
+    Default: db.t3.small
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+    ConstraintDescription: 必须是有效的RDS实例类型
+    
+  DBAllocatedStorage:
+    Description: 数据库存储大小 (GB)
+    Type: Number
+    Default: 20
+    MinValue: 20
+    MaxValue: 1000
+    
+  DBName:
+    Description: MySQL数据库名称
+    Type: String
+    Default: anomalydb
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: 必须以字母开头并且只包含字母和数字
+    
+  DBUsername:
+    Description: 数据库管理员用户名
+    Type: String
+    Default: admin
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: 必须以字母开头并且只包含字母和数字
+    
+  DBPassword:
+    Description: 数据库管理员密码
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 41
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: 必须只包含字母数字字符
+
+Resources:
+  # VPC配置
+  AppVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-vpc
+
+  # 公有子网 - 用于EC2
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-public-subnet-1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-public-subnet-2
+
+  # 私有子网 - 用于RDS
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-subnet-1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: 10.0.4.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-private-subnet-2
+
+  # 互联网网关
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref AppVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # 公有路由表
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-public-routes
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # EC2安全组
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EC2实例的安全组
+      VpcId: !Ref AppVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: 允许SSH访问
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: 允许HTTP访问
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: 允许HTTPS访问
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+          Description: 允许Node.js应用访问
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ec2-sg
+
+  # RDS安全组
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS实例的安全组
+      VpcId: !Ref AppVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+          Description: 允许EC2实例访问MySQL
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-rds-sg
+
+  # EC2实例
+  AppServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref PublicSubnet1
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          # 更新系统
+          apt-get update -y
+          apt-get upgrade -y
+          
+          # 安装Node.js
+          curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+          apt-get install -y nodejs
+          
+          # 安装Git和其他工具
+          apt-get install -y git build-essential
+          
+          # 安装PM2
+          npm install -g pm2
+          
+          # 创建应用目录
+          mkdir -p /home/ubuntu/anomaly-detection-backend
+          chown -R ubuntu:ubuntu /home/ubuntu/anomaly-detection-backend
+          
+          # 设置应用环境变量
+          cat > /home/ubuntu/anomaly-detection-backend/.env <<EOL
+          PORT=3000
+          NODE_ENV=production
+          DB_HOST=${DBInstance.Endpoint.Address}
+          DB_PORT=3306
+          DB_NAME=${DBName}
+          DB_USER=${DBUsername}
+          DB_PASSWORD=${DBPassword}
+          EOL
+          
+          # 设置PM2配置
+          cat > /home/ubuntu/anomaly-detection-backend/ecosystem.config.js <<EOL
+          module.exports = {
+            apps: [{
+              name: 'api-server',
+              script: 'server.js',
+              instances: 'max',
+              exec_mode: 'cluster',
+              env: {
+                NODE_ENV: 'production'
+              }
+            }]
+          };
+          EOL
+          
+          # 拉取应用代码
+          cat > /home/ubuntu/setup.sh <<EOL
+          #!/bin/bash
+          cd /home/ubuntu/anomaly-detection-backend
+          git clone https://github.com/yourusername/anomaly-detection-backend.git .
+          npm install
+          chmod +x deploy.sh
+          EOL
+          
+          chmod +x /home/ubuntu/setup.sh
+          sudo -u ubuntu /home/ubuntu/setup.sh
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-app-server
+
+  # RDS数据库子网组
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: 异常检测系统数据库子网组
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-db-subnet-group
+
+  # RDS MySQL实例
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: !Ref DBName
+      Engine: mysql
+      EngineVersion: 8.0.31
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref DBAllocatedStorage
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      BackupRetentionPeriod: 7
+      MultiAZ: false
+      PubliclyAccessible: false
+      StorageType: gp2
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-mysql-db
+    DeletionPolicy: Snapshot
+
+  # 最新的Amazon Linux 2 AMI参数
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Outputs:
+  VPCID:
+    Description: VPC ID
+    Value: !Ref AppVPC
+    Export:
+      Name: !Sub ${EnvironmentName}-vpc-id
+
+  EC2PublicIP:
+    Description: EC2实例的公网IP地址
+    Value: !GetAtt AppServer.PublicIp
+    Export:
+      Name: !Sub ${EnvironmentName}-ec2-public-ip
+
+  EC2PublicDNS:
+    Description: EC2实例的公网DNS
+    Value: !GetAtt AppServer.PublicDnsName
+    Export:
+      Name: !Sub ${EnvironmentName}-ec2-public-dns
+
+  RDSEndpoint:
+    Description: RDS实例的连接端点
+    Value: !GetAtt DBInstance.Endpoint.Address
+    Export:
+      Name: !Sub ${EnvironmentName}-rds-endpoint 

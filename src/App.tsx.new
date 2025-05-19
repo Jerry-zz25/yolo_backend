@@ -1,0 +1,135 @@
+import React from 'react';
+import { CssBaseline, ThemeProvider, createTheme, Container, AppBar, Toolbar, Typography, Box, Tabs, Tab } from '@mui/material';
+import SearchPage from './components/SearchPage/SearchPage';
+import DemoPage from './components/DemoPage/DemoPage';
+import VideoDetector from './components/VideoDetector';
+import EventListDemo from './components/EventListDemo';
+import EnvDemo from './components/EnvDemo';
+
+// 创建主题
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+    background: {
+      default: '#f5f5f5',
+    },
+  },
+  typography: {
+    fontFamily: [
+      '-apple-system',
+      'BlinkMacSystemFont',
+      '"Segoe UI"',
+      'Roboto',
+      '"Helvetica Neue"',
+      'Arial',
+      'sans-serif',
+    ].join(','),
+  },
+});
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ pt: 2 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
+// 注意：以下是根据用户要求添加的新App函数
+// 可以通过注释/取消注释来切换不同版本
+/*
+function App() {
+  return (
+    <div className="App">
+      <h1>Anomaly Detection</h1>
+      <VideoDetector />
+    </div>
+  );
+}
+*/
+
+// 原有App函数 - 具有完整功能的版本
+function App() {
+  const [tabValue, setTabValue] = React.useState(0);
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <AppBar position="static">
+          <Toolbar>
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+              自动异常检测系统
+            </Typography>
+          </Toolbar>
+          <Tabs
+            value={tabValue}
+            onChange={handleTabChange}
+            aria-label="基本标签"
+            sx={{ bgcolor: 'primary.main' }}
+            centered
+          >
+            <Tab label="搜索页面" />
+            <Tab label="YOLO检测演示" />
+            <Tab label="简单检测器" />
+            <Tab label="告警事件列表" />
+            <Tab label="环境变量演示" />
+          </Tabs>
+        </AppBar>
+
+        <Container maxWidth="xl" sx={{ mt: 4, mb: 4, flexGrow: 1 }}>
+          <TabPanel value={tabValue} index={0}>
+            <SearchPage />
+          </TabPanel>
+          <TabPanel value={tabValue} index={1}>
+            <DemoPage />
+          </TabPanel>
+          <TabPanel value={tabValue} index={2}>
+            <VideoDetector />
+          </TabPanel>
+          <TabPanel value={tabValue} index={3}>
+            <EventListDemo />
+          </TabPanel>
+          <TabPanel value={tabValue} index={4}>
+            <EnvDemo />
+          </TabPanel>
+        </Container>
+
+        <Box component="footer" sx={{ py: 2, bgcolor: 'background.paper', textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            © {new Date().getFullYear()} 自动异常检测系统
+          </Typography>
+        </Box>
+      </Box>
+    </ThemeProvider>
+  );
+}
+
+export default App; 
