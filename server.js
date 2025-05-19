@@ -1,8 +1,31 @@
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const path = require('path');
+const express   = require('express');
+const cors      = require('cors');
+const dotenv    = require('dotenv');
+const path      = require('path');
+const { Sequelize } = require('sequelize');
 
+dotenv.config();
+
+// —— 新增数据库连接 —— 
+const sequelize = new Sequelize(
+  process.env.DB_NAME,
+  process.env.DB_USER,
+  process.env.DB_PASS,
+  {
+    host:     process.env.DB_HOST,
+    port:     Number(process.env.DB_PORT) || 3306,
+    dialect:  'mysql',
+    logging:  false,
+  }
+);
+
+sequelize
+  .authenticate()
+  .then(() => console.log('✅ DB connected'))
+  .catch(err => {
+    console.error('❌ DB connection failed:', err);
+    process.exit(1);
+  });
 // 导入路由模块
 const alertsRouter = require('./src/routes/alerts');
 const detectionsRouter = require('./src/routes/detections');
