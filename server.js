@@ -27,7 +27,7 @@ sequelize
     process.exit(1);
   });
 // 导入路由模块
-const alertsRouter = require('./src/routes/alerts');
+const app = require('./src/app'); 
 const detectionsRouter = require('./src/routes/detections');
 const uploadsRouter = require('./src/routes/uploads');
 
@@ -57,7 +57,7 @@ app.get('/health', (req, res) => {
 });
 
 // 挂载 API 路由
-app.use('/api/alerts', alertsRouter);
+
 app.use('/api/detections', detectionsRouter);
 app.use('/api/uploads', uploadsRouter);
 
