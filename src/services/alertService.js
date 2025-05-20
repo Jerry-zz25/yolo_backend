@@ -1,88 +1,87 @@
+// src/services/alertService.js
 const Alert = require('../models/Alert');
 const { sequelize } = require('../config/database');
 
+/* ------------------------------------------------------------------ *
+ |  基础 CRUD                                                          |
+ * ------------------------------------------------------------------ */
+
 /**
- * 获取所有告警记录
- * @returns {Promise<Array>} 告警记录数组
+ * 分页 / 条件 查询告警
+ * @param {Object}   query
+ * @param {number}   query.page=1
+ * @param {number}   query.limit=10
+ * @param {string=}  query.severity
+ * @param {string=}  query.status
+ * @param {string=}  query.source
  */
-exports.getAlerts = async () => {
-  return await Alert.findAll({
-    order: [['timestamp', 'DESC']]
+exports.getAlerts = async ({
+  page = 1,
+  limit = 10,
+  severity,
+  status,
+  source,
+} = {}) => {
+  const where = {};
+  if (severity) where.severity = severity;
+  if (status)   where.status   = status;
+  if (source)   where.source   = source;
+
+  const offset = (page - 1) * limit;
+
+  return await Alert.findAndCountAll({
+    where,
+    limit:  parseInt(limit, 10),
+    offset: parseInt(offset, 10),
+    order: [['timestamp', 'DESC']],
   });
 };
 
-/**
- * 根据ID获取单个告警记录
- * @param {string} id 告警ID
- * @returns {Promise<Object|null>} 告警记录或null
- */
-exports.getAlertById = async (id) => {
-  return await Alert.findByPk(id);
-};
+exports.getAlertById = (id) => Alert.findByPk(id);
 
 /**
- * 创建新的告警记录
- * @param {Object} alertData 告警数据
- * @param {string} alertData.type 告警类型
- * @param {string} alertData.message 告警消息
- * @param {string} [alertData.frameUrl] 图像帧URL
- * @returns {Promise<Object>} 创建的告警记录
+ * 创建告警
+ * @param {{
+ *   title: string,
+ *   timestamp: Date|string,
+ *   description?: string,
+ *   severity?: 'low'|'medium'|'high'|'critical',
+ *   status?: 'new'|'acknowledged'|'resolved',
+ *   source?: string,
+ *   metadata?: Object
+ * }} data
  */
-exports.createAlert = async (alertData) => {
-  // 添加时间戳（如果未提供）
-  if (!alertData.timestamp) {
-    alertData.timestamp = new Date();
-  }
-  
-  return await Alert.create(alertData);
+exports.createAlert = async (data) => {
+  if (!data.timestamp) data.timestamp = new Date(); // 补默认时间戳
+  return await Alert.create(data);
 };
 
-/**
- * 更新告警记录
- * @param {string} id 告警ID
- * @param {Object} updateData 更新的数据
- * @returns {Promise<Object|null>} 更新后的告警记录或null
- */
-exports.updateAlert = async (id, updateData) => {
+exports.updateAlert = async (id, data) => {
   const alert = await Alert.findByPk(id);
-  
-  if (!alert) {
-    return null;
-  }
-  
-  return await alert.update(updateData);
+  if (!alert) return null;
+  return await alert.update(data);
 };
 
-/**
- * 删除告警记录
- * @param {string} id 告警ID
- * @returns {Promise<boolean>} 是否成功删除
- */
-exports.deleteAlert = async (id) => {
-  const numDeleted = await Alert.destroy({
-    where: { id }
-  });
-  
-  return numDeleted > 0;
-};
+exports.deleteAlert = async (id) =>
+  (await Alert.destroy({ where: { id } })) > 0;
 
-/**
- * 按类型统计告警
- * @returns {Promise<Object>} 按类型统计的告警数量
- */
-exports.countAlertsByType = async () => {
-  const results = await Alert.findAll({
+/* ------------------------------------------------------------------ *
+ |  高级工具：统计                                                     |
+ * ------------------------------------------------------------------ */
+
+/** 按 severity 统计告警数量 */
+exports.countAlertsBySeverity = async () => {
+  const rows = await Alert.findAll({
     attributes: [
-      'type',
-      [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+      'severity',
+      [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
     ],
-    group: ['type']
+    group: ['severity'],
   });
-  
+
   const counts = {};
-  results.forEach(result => {
-    counts[result.type] = result.getDataValue('count');
+  rows.forEach((row) => {
+    counts[row.severity] = Number(row.getDataValue('count'));
   });
-  
-  return counts;
-}; 
+  return counts; // 例如 { low: 3, medium: 7, high: 2 }
+};
