@@ -50,7 +50,7 @@ router.post('/', async (req, res) => {
     });
     
     // 返回创建的告警，状态码 201（Created）
-    res.status(201).json(newAlert);
+    return res.status(201).json(newAlert);
   } catch (error) {
     console.error('创建告警失败:', error);
     res.status(500).json({ error: '创建告警失败' });
