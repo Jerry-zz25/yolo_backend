@@ -1,12 +1,12 @@
-const express   = require('express');
-const cors      = require('cors');
-const dotenv    = require('dotenv');
-const path      = require('path');
+// server.js
+require('dotenv').config();               // 顶部一次即可
+
+const express = require('express');
+const cors    = require('cors');
+const path    = require('path');
 const { Sequelize } = require('sequelize');
 
-dotenv.config();
-
-// —— 新增数据库连接 —— 
+/* -------------------------- DB connection ------------------------- */
 const sequelize = new Sequelize(
   process.env.DB_NAME,
   process.env.DB_USER,
@@ -19,72 +19,61 @@ const sequelize = new Sequelize(
   }
 );
 
-sequelize
-  .authenticate()
+sequelize.authenticate()
   .then(() => console.log('✅ DB connected'))
   .catch(err => {
     console.error('❌ DB connection failed:', err);
     process.exit(1);
   });
-// 导入路由模块
-const app = require('./src/app'); 
-const detectionsRouter = require('./src/routes/detections');
-const uploadsRouter = require('./src/routes/uploads');
 
-// 加载环境变量
-dotenv.config();
-
-// 初始化 Express 应用
+/* -------------------------- Express app --------------------------- */
 const app = express();
 
-// 配置 CORS
+/* ----------------------------- CORS ------------------------------ */
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  credentials: true
+  credentials: true,
 }));
 
-// 中间件
+/* --------------------------- Middlewares ------------------------- */
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-
-// 静态文件服务
 app.use(express.static(path.join(__dirname, 'src/public')));
 
-// 健康检查端点
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
+/* ---------------------------- Routers ---------------------------- */
+const alertsRouter     = require('./src/routes/alerts');      // ✅ 新路由
+const detectionsRouter = require('./src/routes/detections');
+const uploadsRouter    = require('./src/routes/uploads');
 
-// 挂载 API 路由
+console.log('Loaded alerts route file:', require.resolve('./src/routes/alerts'));
 
+app.use('/api/alerts',     alertsRouter);     // 只挂载一次
 app.use('/api/detections', detectionsRouter);
-app.use('/api/uploads', uploadsRouter);
+app.use('/api/uploads',    uploadsRouter);
 
-// 首页路由
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'src/public/index.html'));
-});
+/* -------------------------- Health Check ------------------------- */
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
-// 404 处理
-app.use((req, res) => {
-  res.status(404).json({ message: '资源未找到' });
-});
+/* ------------------------------ Home ----------------------------- */
+app.get('/', (req, res) =>
+  res.sendFile(path.join(__dirname, 'src/public/index.html')));
 
-// 错误处理中间件
+/* ------------------------ 404 & Error ---------------------------- */
+app.use((req, res) => res.status(404).json({ message: '资源未找到' }));
+
 app.use((err, req, res, next) => {
-  console.error(err.message);
+  console.error(err);
   res.status(err.statusCode || 500).json({
-    status: 'error',
-    message: err.message || '服务器内部错误'
+    status:  'error',
+    message: err.message || '服务器内部错误',
   });
 });
 
-// 设置端口
+/* --------------------------- Start Up ---------------------------- */
 const PORT = process.env.PORT || 3000;
 
-// 启动服务器
-app.listen(PORT, () => {
-  console.log(`服务器运行在 http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 服务器运行在 http://0.0.0.0:${PORT}`);
   console.log(`环境: ${process.env.NODE_ENV || 'development'}`);
 });
