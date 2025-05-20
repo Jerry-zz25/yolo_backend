@@ -22,17 +22,32 @@ router.get('/', async (req, res) => {
  * @desc 创建新的告警记录
  * @access Public
  */
-router.post('/', async (req, res) => {
-  try {
-    const { type, message, frameUrl } = req.body;
-    
-    // 基本验证
-    if (!type || !message) {
-      return res.status(400).json({ error: '缺少必要字段：type, message' });
-    }
-    
-    // 创建告警
-    const newAlert = await alertService.createAlert({ type, message, frameUrl });
+router.post('/', async (req, res) => { 
+  try { 
+    const { 
+      title, 
+      description, 
+      severity = 'medium', 
+      status = 'new',
+      source = 'unknown', 
+      metadata, 
+      timestamp, 
+    } = req.body; 
+ 
+    // 新字段校验 
+    if (!title || !timestamp) { 
+      return res.status(400).json({ error: '缺少必要字段：title, timestamp' }); 
+    } 
+ 
+    const newAlert = await alertService.createAlert({ 
+      title, 
+      description, 
+      severity, 
+      status, 
+      source, 
+      metadata, 
+      timestamp, 
+    });
     
     // 返回创建的告警，状态码 201（Created）
     res.status(201).json(newAlert);
