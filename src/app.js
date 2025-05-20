@@ -19,11 +19,11 @@ app.get('/health', (req, res) => {
 });
 
 // 导入路由
-const alertRoutes = require('./routes/alertRoutes');
+const alertsRouter = require('./routes/alerts');
 const detectionRoutes = require('./routes/detectionRoutes');
 
 // 注册路由
-app.use('/api/alerts', alertRoutes);
+app.use('/api/alerts', alertsRouter);;
 app.use('/api/detections', detectionRoutes);
 
 // 处理 404
